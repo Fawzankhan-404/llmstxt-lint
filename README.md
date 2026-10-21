@@ -1,15 +1,19 @@
 # llmstxt-lint
 
-A fast, zero-dependency linter for [`llms.txt`](https://llmstxt.org/) files — the proposed standard for giving LLMs and AI agents a curated map of your docs.
+[![CI](https://github.com/Fuji643/llmstxt-lint/actions/workflows/ci.yml/badge.svg)](https://github.com/Fuji643/llmstxt-lint/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.9–3.13](https://img.shields.io/badge/python-3.9%E2%80%933.13-blue.svg)](pyproject.toml)
 
-More and more sites publish `/llms.txt`, but malformed files (missing title, broken link lists, bad URLs) silently degrade what agents can read. `llmstxt-lint` catches those problems locally and in CI.
+A fast, zero-dependency linter for [`llms.txt`](https://llmstxt.org/) and `llms-full.txt` files, the proposed standard for giving LLMs and AI agents a curated map of your docs.
+
+Malformed files (missing title, broken link lists, dead links, an HTML page served instead of Markdown) silently degrade what agents can read. `llmstxt-lint` catches them locally, in pre-commit, and in CI, including GitHub code scanning via SARIF.
+
+The rules were tuned against [19 real public llms.txt files](docs/real-world.md) (Anthropic, Stripe, Vercel, Cloudflare, Next.js, and more).
 
 ## Install
 
 ```bash
-pip install llmstxt-lint        # once published to PyPI
-# or from source
-pip install git+https://github.com/Fuji643/llmstxt-lint
+pip install git+https://github.com/Fuji643/llmstxt-lint   # PyPI release coming soon
 ```
 
 Requires Python 3.9+. No runtime dependencies.
@@ -17,13 +21,18 @@ Requires Python 3.9+. No runtime dependencies.
 ## Usage
 
 ```bash
-llmstxt-lint llms.txt
-llmstxt-lint docs/llms.txt public/llms-full.txt --strict
+llmstxt-lint llms.txt                              # lint a file
+llmstxt-lint https://example.com/llms.txt          # lint a live URL
+llmstxt-lint llms.txt --check-links --timeout 5 --concurrency 16
+llmstxt-lint public/llms-full.txt                  # full-file mode (auto by name, or --full)
+llmstxt-lint llms.txt --format sarif -o llms.sarif # for GitHub code scanning
+llmstxt-lint llms.txt --format json --strict --ignore missing-summary
 cat llms.txt | llmstxt-lint -
-llmstxt-lint llms.txt --format json --ignore missing-summary
 ```
 
-Exit codes: `0` clean (warnings allowed), `1` errors found (or warnings with `--strict`), `2` file could not be read.
+Exit codes: `0` clean (warnings allowed), `1` errors (or warnings with `--strict`), `2` a local file could not be read.
+
+`--check-links` tries `HEAD` and falls back to `GET`. It counts 4xx/5xx responses, DNS failures and timeouts as broken, and treats 401/403/429 as reachable (auth-protected or rate-limited). Relative links are resolved against the URL being linted or `--base-url`.
 
 ### Example
 
@@ -31,61 +40,71 @@ Exit codes: `0` clean (warnings allowed), `1` errors found (or warnings with `--
 $ llmstxt-lint examples/bad.txt
 examples/bad.txt:1: error [h1-not-first] The H1 title must be the first content
 examples/bad.txt:4: error [invalid-url] Invalid URL 'ftp://bad'
-examples/bad.txt:5: error [list-item-not-link] List items in sections must be '- [name](url)' or '- [name](url): notes'
+examples/bad.txt:5: warning [list-item-not-link] List item in a link section is not '- [name](url)' or '- [name](url): notes'
 examples/bad.txt:7: warning [optional-not-last] The 'Optional' section should be the last section
 ...
 ```
 
-### GitHub Actions
+## GitHub Action
 
 ```yaml
-- run: pip install llmstxt-lint
-- run: llmstxt-lint public/llms.txt --strict
+- uses: actions/checkout@v4
+- uses: Fuji643/llmstxt-lint@v0
+  with:
+    files: public/llms.txt public/llms-full.txt
+    args: --strict
+    sarif: llmstxt.sarif          # optional
+- uses: github/codeql-action/upload-sarif@v3   # optional: show findings in code scanning
+  if: always()
+  with:
+    sarif_file: llmstxt.sarif
 ```
 
-### Python API
+## pre-commit
+
+```yaml
+repos:
+  - repo: https://github.com/Fuji643/llmstxt-lint
+    rev: v0.2.0
+    hooks:
+      - id: llmstxt-lint
+```
+
+## Python API
 
 ```python
 from llmstxt_lint import lint_text
-for issue in lint_text(open("llms.txt").read()):
-    print(issue.line, issue.rule, issue.message)
+for issue in lint_text(open("llms.txt").read()):          # kind="full" for llms-full.txt
+    print(issue.line, issue.severity, issue.rule, issue.message)
 ```
 
 ## Rules
 
-| Rule | Severity | Meaning |
-|---|---|---|
-| `empty-file` | error | File has no content |
-| `missing-h1` | error | No `# Title` |
-| `h1-not-first` | error | Content appears before the title |
-| `multiple-h1` | error | More than one H1 |
-| `h1-after-section` | error | H1 appears after an H2 section |
-| `empty-heading` | error | Heading without text |
-| `invalid-url` | error | Link is not http(s) or a relative path |
-| `list-item-not-link` | error | List item in a section is not `[name](url)` |
-| `missing-summary` | warning | No `> summary` blockquote after the title |
-| `link-notes-format` | warning | Notes after a link don't start with `:` |
-| `duplicate-link` | warning | Same URL listed twice |
-| `duplicate-section` | warning | Same H2 name used twice |
-| `empty-section` | warning | H2 section with no links |
-| `prose-in-section` | warning | Non-list text inside a section |
-| `heading-level` | warning | H3+ headings |
-| `optional-not-last` | warning | `## Optional` is not the last section |
+20 rules. See the **[rules reference](docs/rules.md)** for why each exists, with examples.
 
-Fenced code blocks are ignored.
+| Rule | Severity |
+|---|---|
+| `empty-file`, `html-content`, `missing-h1`, `h1-not-first`, `multiple-h1`, `h1-after-section`, `empty-heading`, `invalid-url`, `broken-link`¹, `fetch-error`² | error |
+| `missing-summary`, `link-notes-format`, `list-item-not-link`, `duplicate-link`, `duplicate-section`, `empty-section`, `prose-in-section`, `heading-level`, `optional-not-last`, `unclosed-code-fence` | warning |
+
+¹ only with `--check-links` ² only for URL inputs
 
 ## Roadmap
 
-- `--check-links` to verify URLs resolve (opt-in, network)
-- `llms-full.txt` checks and a pre-commit hook
+See [open issues](https://github.com/Fuji643/llmstxt-lint/issues): autofix (`--fix`), a VS Code extension, an npm wrapper, a config file, and more.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Security reports: [SECURITY.md](SECURITY.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). Security reports: [SECURITY.md](SECURITY.md).
 
 ## 日本語
 
-`llmstxt-lint` は、AIエージェント向けのサイト案内ファイル `llms.txt` の書き方ミス（タイトルなし、リンク形式の崩れ、不正なURLなど）を検出するツールです。依存ライブラリなしで、`pip install` 後に `llmstxt-lint llms.txt` で使えます。CIに組み込めば、壊れた `llms.txt` の公開を防げます。
+`llmstxt-lint` は、AIエージェント向けのサイト案内ファイル `llms.txt` / `llms-full.txt` の書き方ミスを見つけるツールです。タイトルがない、リンク形式が崩れている、リンク切れ、HTMLが返ってきている、などを検出します。依存ライブラリはありません。ファイルでもURLでもチェックでき、GitHub Action・pre-commit・SARIF（GitHubのコードスキャン表示）にも対応しています。
+
+```bash
+llmstxt-lint llms.txt
+llmstxt-lint https://example.com/llms.txt --check-links
+```
 
 ## License
 
