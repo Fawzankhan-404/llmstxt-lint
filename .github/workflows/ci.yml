@@ -53,7 +53,13 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install pre-commit
-      - run: pre-commit try-repo . llmstxt-lint --files examples/good.txt
+      - name: Hook passes on a valid llms.txt and fails on an invalid one
+        run: |
+          mkdir -p t/ok t/bad
+          cp examples/good.txt t/ok/llms.txt
+          cp examples/bad.txt t/bad/llms.txt
+          pre-commit try-repo . llmstxt-lint --files t/ok/llms.txt
+          if pre-commit try-repo . llmstxt-lint --files t/bad/llms.txt; then exit 1; fi
   build:
     needs: test
     runs-on: ubuntu-latest
