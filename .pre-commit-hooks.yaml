@@ -1,0 +1,7 @@
+- id: llmstxt-lint
+  name: llmstxt-lint
+  description: Lint llms.txt and llms-full.txt files
+  entry: llmstxt-lint
+  language: python
+  files: (^|/)llms(-full)?\.txt$
+  types: [text]

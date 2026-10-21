@@ -1,0 +1,50 @@
+name: "llmstxt-lint"
+description: "Lint llms.txt / llms-full.txt files (optionally check links and upload SARIF to code scanning)"
+author: "Fuji643"
+branding:
+  icon: "check-square"
+  color: "purple"
+inputs:
+  files:
+    description: "Space-separated files or URLs to lint"
+    required: false
+    default: "llms.txt"
+  args:
+    description: "Extra CLI arguments, e.g. '--strict --check-links'"
+    required: false
+    default: ""
+  sarif:
+    description: "Path to also write a SARIF report to (empty to skip)"
+    required: false
+    default: ""
+  version:
+    description: "llmstxt-lint version to install from this action's ref (default: the action's own code)"
+    required: false
+    default: ""
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - name: Install llmstxt-lint
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.version }}" ]; then
+          pip install "llmstxt-lint==${{ inputs.version }}"
+        else
+          pip install "${{ github.action_path }}"
+        fi
+    - name: Lint
+      shell: bash
+      env:
+        FILES: ${{ inputs.files }}
+        ARGS: ${{ inputs.args }}
+        SARIF: ${{ inputs.sarif }}
+      run: |
+        status=0
+        if [ -n "$SARIF" ]; then
+          llmstxt-lint $FILES $ARGS --format sarif -o "$SARIF" || true
+        fi
+        llmstxt-lint $FILES $ARGS || status=$?
+        exit $status
