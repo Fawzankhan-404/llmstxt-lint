@@ -4,12 +4,21 @@ on:
     branches: [main]
     tags: ["v*"]
   pull_request:
+permissions:
+  contents: read
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        include:
+          - os: windows-latest
+            python-version: "3.12"
+          - os: macos-latest
+            python-version: "3.12"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -17,7 +26,34 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e . pytest
       - run: pytest -q
-      - run: llmstxt-lint examples/good.txt
+      - run: llmstxt-lint examples/good.txt --strict
+  action:
+    name: Self-test the GitHub Action
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          files: examples/good.txt
+          args: --strict
+          sarif: results.sarif
+      - run: test -s results.sarif
+      - name: Action must fail on bad input
+        id: bad
+        continue-on-error: true
+        uses: ./
+        with:
+          files: examples/bad.txt
+      - run: test "${{ steps.bad.outcome }}" = "failure"
+  pre-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pre-commit
+      - run: pre-commit try-repo . llmstxt-lint --files examples/good.txt
   build:
     needs: test
     runs-on: ubuntu-latest
@@ -26,7 +62,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install build && python -m build
+      - run: pip install build twine && python -m build && twine check dist/*
       - uses: actions/upload-artifact@v4
         with:
           name: dist
