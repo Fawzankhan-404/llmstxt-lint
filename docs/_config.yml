@@ -1,0 +1,3 @@
+title: llmstxt-lint
+description: Zero-dependency linter for llms.txt and llms-full.txt
+theme: jekyll-theme-cayman
