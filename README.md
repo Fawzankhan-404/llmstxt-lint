@@ -32,6 +32,10 @@ cat llms.txt | llmstxt-lint -
 
 Exit codes: `0` clean (warnings allowed), `1` errors (or warnings with `--strict`), `2` a local file could not be read.
 
+Intentional findings can be suppressed in the file with HTML comments. Use
+`<!-- llmstxt-lint-disable rule-id -->` and a matching `enable` comment, or
+`disable-next-line` for one line. Comments without a directive are ignored.
+
 `--check-links` tries `HEAD` and falls back to `GET`. It counts 4xx/5xx responses, DNS failures and timeouts as broken, and treats 401/403/429 as reachable (auth-protected or rate-limited). Relative links are resolved against the URL being linted or `--base-url`.
 
 ### Example

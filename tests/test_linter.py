@@ -46,6 +46,31 @@ def test_relative_urls_ok():
     assert "invalid-url" not in rules("# A\n> s\n## D\n- [a](./a.md)\n")
 
 
+def test_comments_are_ignored_and_can_suppress_rules():
+    text = "# A\n> summary\n<!-- a note for authors -->\n<!-- llmstxt-lint-disable list-item-not-link -->\n## Docs\n- [Guide](https://example.com)\n- prose\n<!-- llmstxt-lint-enable list-item-not-link -->\n- more prose\n"
+    assert [i.line for i in lint_text(text) if i.rule == "list-item-not-link"] == [9]
+
+
+def test_disable_next_line_suppresses_only_the_next_line():
+    text = "# A\n> summary\n## Docs\n- [Guide](https://example.com)\n<!-- llmstxt-lint-disable-next-line list-item-not-link -->\n- prose\n- more prose\n"
+    assert [i.line for i in lint_text(text) if i.rule == "list-item-not-link"] == [7]
+
+
+def test_directives_inside_code_blocks_are_ignored():
+    text = "# A\n> summary\n```html\n<!-- llmstxt-lint-disable invalid-url -->\n```\n## Docs\n- [Broken](nope)\n"
+    assert "invalid-url" in rules(text)
+
+
+def test_comments_do_not_affect_structural_checks():
+    text = "<!-- a note -->\n# A\n<!-- another note -->\n> summary\n"
+    assert lint_text(text) == []
+
+
+def test_full_file_directives_suppress_findings():
+    text = "<!-- llmstxt-lint-disable missing-h1,unclosed-code-fence -->\n```\n"
+    assert lint_text(text, kind="full") == []
+
+
 def test_cli_exit_codes(tmp_path, capsys):
     assert main([str(EX / "good.txt")]) == 0
     assert main([str(EX / "bad.txt")]) == 1

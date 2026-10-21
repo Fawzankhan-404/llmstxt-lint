@@ -4,6 +4,9 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/) and [
 
 ## [Unreleased]
 
+### Added
+- Inline HTML comment directives for suppressing intentional findings with `disable`, `enable`, and `disable-next-line`.
+
 ## [0.2.0] - 2026-10-21
 ### Added
 - Lint remote files: `llmstxt-lint https://site/llms.txt`.

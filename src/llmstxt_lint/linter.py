@@ -7,6 +7,8 @@ from urllib.parse import urlparse
 
 LINK_ITEM = re.compile(r"^[-*+]\s+\[(?P<name>[^\]]+)\]\((?P<url>[^)\s]+)\)(?P<rest>.*)$")
 HEADING = re.compile(r"^(?P<hashes>#{1,6})\s+(?P<text>.*?)\s*#*\s*$")
+COMMENT = re.compile(r"<!--(?P<body>.*?)-->")
+CONTROL = re.compile(r"^\s*llmstxt-lint-(?P<action>disable-next-line|disable|enable)(?:\s+(?P<rules>[\w,-]+))?\s*$")
 
 
 @dataclass
@@ -35,14 +37,38 @@ def lint_text(text: str, kind: str = "llms") -> list[Issue]:
     if text.startswith("\ufeff"):
         text = text[1:]
     lines = text.splitlines()
-    first_content = next((i for i, l in enumerate(lines) if l.strip()), None)
+    visible_lines = [COMMENT.sub("", raw).rstrip() for raw in lines]
+    disabled_by_line: dict[int, set[str]] = {}
+    disabled_lines: dict[int, set[str]] = {}
+    active_disabled: set[str] = set()
+    in_code = False
+    for idx, raw in enumerate(lines):
+        disabled_by_line[idx + 1] = set(active_disabled)
+        if visible_lines[idx].lstrip().startswith("```"):
+            in_code = not in_code
+            continue
+        if in_code:
+            continue
+        for match in COMMENT.finditer(raw):
+            control = CONTROL.match(match.group("body"))
+            if not control:
+                continue
+            rules = {r for r in (control.group("rules") or "").split(",") if r}
+            if control.group("action") == "disable":
+                active_disabled.update(rules)
+            elif control.group("action") == "enable":
+                active_disabled.difference_update(rules)
+            else:
+                disabled_lines[idx + 2] = rules
+    first_content = next((i for i, l in enumerate(visible_lines) if l.strip()), None)
     if first_content is None:
         return [Issue(1, "empty-file", "error", "File is empty")]
-    if HTML_START.match(lines[first_content]):
+    if HTML_START.match(visible_lines[first_content]):
         return [Issue(first_content + 1, "html-content", "error",
                       "File is HTML, not Markdown (server is probably returning a web page)")]
     if kind == "full":
-        return _lint_full(lines, first_content)
+        issues = _lint_full(visible_lines, first_content)
+        return _filter_disabled(issues, disabled_by_line, disabled_lines)
     issues: list[Issue] = []
 
     h1_lines = []
@@ -55,7 +81,7 @@ def lint_text(text: str, kind: str = "llms") -> list[Issue]:
 
     for idx, raw in enumerate(lines):
         n = idx + 1
-        line = raw.rstrip()
+        line = visible_lines[idx]
         if line.lstrip().startswith("```"):
             in_code = not in_code
             continue
@@ -111,7 +137,7 @@ def lint_text(text: str, kind: str = "llms") -> list[Issue]:
             issues.append(Issue(first_content + 1, "h1-not-first", "error", "The H1 title must be the first content"))
         for n in h1_lines[1:]:
             issues.append(Issue(n, "multiple-h1", "error", "Only one H1 title is allowed"))
-        nxt = next((l.strip() for l in lines[h1_lines[0]:] if l.strip()), "")
+        nxt = next((l.strip() for l in visible_lines[h1_lines[0]:] if l.strip()), "")
         if not nxt.startswith(">"):
             issues.append(Issue(h1_lines[0], "missing-summary", "warning", "Add a '> summary' blockquote after the title"))
     for n, title, count, non_links in sections:
@@ -129,7 +155,19 @@ def lint_text(text: str, kind: str = "llms") -> list[Issue]:
         issues.append(Issue(opt[-1][0], "optional-not-last", "warning", "The 'Optional' section should be the last section"))
     if in_code:
         issues.append(Issue(len(lines), "unclosed-code-fence", "warning", "A ``` code fence is never closed"))
-    return sorted(issues, key=lambda i: (i.line, i.rule))
+    return _filter_disabled(issues, disabled_by_line, disabled_lines)
+
+
+def _filter_disabled(
+    issues: list[Issue],
+    disabled_by_line: dict[int, set[str]],
+    disabled_lines: dict[int, set[str]],
+) -> list[Issue]:
+    return sorted(
+        (i for i in issues if i.rule not in disabled_by_line.get(i.line, set())
+         and i.rule not in disabled_lines.get(i.line, set())),
+        key=lambda i: (i.line, i.rule),
+    )
 
 
 def _lint_full(lines: list[str], first: int) -> list[Issue]:
