@@ -9,7 +9,7 @@ More and more sites publish `/llms.txt`, but malformed files (missing title, bro
 ```bash
 pip install llmstxt-lint        # once published to PyPI
 # or from source
-pip install git+https://github.com/<you>/llmstxt-lint
+pip install git+https://github.com/Fuji643/llmstxt-lint
 ```
 
 Requires Python 3.9+. No runtime dependencies.
