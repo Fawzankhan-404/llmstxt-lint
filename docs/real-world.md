@@ -52,3 +52,7 @@ The first run of v0.1.0 over these files produced many errors that were really r
 - `duplicate-link`: docs.stripe.com lists 7 URLs twice.
 - `duplicate-section`: docs.expo.dev repeats 4 H2 names.
 - `missing-summary`: 7 of 19 sites have no `> summary` line.
+
+## Compatibility with the reference parser
+
+`llms_txt.parse_llms_file` (PyPI `llms-txt` 0.0.7, from AnswerDotAI/llms-txt) raised an exception on 5 of the 19 files: svelte.dev, vercel.com, orm.drizzle.team, docs.anthropic.com and docs.stripe.com. The cause is a non-link bullet inside an H2 section (upstream issue [#16](https://github.com/AnswerDotAI/llms-txt/issues/16)). It also fails on a file with a title but no `>` summary line directly followed by an H2. llmstxt-lint reports these cases as `empty-section` / `list-item-not-link` / `missing-summary`, so authors can stay compatible with strict consumers.
