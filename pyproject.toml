@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llmstxt-lint"
+version = "0.1.0"
+description = "Zero-dependency linter for llms.txt files (the /llms.txt proposal)"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+classifiers = ["License :: OSI Approved :: MIT License", "Programming Language :: Python :: 3", "Environment :: Console"]
+
+[project.scripts]
+llmstxt-lint = "llmstxt_lint.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
