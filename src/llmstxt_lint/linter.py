@@ -7,6 +7,8 @@ from urllib.parse import urlparse
 
 LINK_ITEM = re.compile(r"^[-*+]\s+\[(?P<name>[^\]]+)\]\((?P<url>[^)\s]+)\)(?P<rest>.*)$")
 HEADING = re.compile(r"^(?P<hashes>#{1,6})\s+(?P<text>.*?)\s*#*\s*$")
+COMMENT = re.compile(r"<!--(?P<body>.*?)-->")
+CONTROL = re.compile(r"^\s*llmstxt-lint-(?P<action>disable-next-line|disable|enable)(?:\s+(?P<rules>[\w,-]+))?\s*$")
 
 
 @dataclass
@@ -35,6 +37,22 @@ def lint_text(text: str, kind: str = "llms") -> list[Issue]:
     if text.startswith("\ufeff"):
         text = text[1:]
     lines = text.splitlines()
+    disabled_by_line: dict[int, set[str]] = {}
+    disabled_lines: dict[int, set[str]] = {}
+    active_disabled: set[str] = set()
+    for idx, raw in enumerate(lines):
+        disabled_by_line[idx + 1] = set(active_disabled)
+        for match in COMMENT.finditer(raw):
+            control = CONTROL.match(match.group("body"))
+            if not control:
+                continue
+            rules = {r for r in (control.group("rules") or "").split(",") if r}
+            if control.group("action") == "disable":
+                active_disabled.update(rules)
+            elif control.group("action") == "enable":
+                active_disabled.difference_update(rules)
+            else:
+                disabled_lines[idx + 2] = rules
     first_content = next((i for i, l in enumerate(lines) if l.strip()), None)
     if first_content is None:
         return [Issue(1, "empty-file", "error", "File is empty")]
@@ -55,7 +73,7 @@ def lint_text(text: str, kind: str = "llms") -> list[Issue]:
 
     for idx, raw in enumerate(lines):
         n = idx + 1
-        line = raw.rstrip()
+        line = COMMENT.sub("", raw).rstrip()
         if line.lstrip().startswith("```"):
             in_code = not in_code
             continue
@@ -129,7 +147,11 @@ def lint_text(text: str, kind: str = "llms") -> list[Issue]:
         issues.append(Issue(opt[-1][0], "optional-not-last", "warning", "The 'Optional' section should be the last section"))
     if in_code:
         issues.append(Issue(len(lines), "unclosed-code-fence", "warning", "A ``` code fence is never closed"))
-    return sorted(issues, key=lambda i: (i.line, i.rule))
+    return sorted(
+        (i for i in issues if i.rule not in disabled_by_line.get(i.line, set())
+         and i.rule not in disabled_lines.get(i.line, set())),
+        key=lambda i: (i.line, i.rule),
+    )
 
 
 def _lint_full(lines: list[str], first: int) -> list[Issue]:
