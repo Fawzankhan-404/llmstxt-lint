@@ -1,0 +1,23 @@
+"""Short descriptions of every rule id (kept in sync with docs/rules.md)."""
+RULES = {
+    "empty-file": "File has no content",
+    "html-content": "File is an HTML page, not Markdown",
+    "missing-h1": "No H1 title",
+    "h1-not-first": "Content appears before the H1 title",
+    "multiple-h1": "More than one H1 title",
+    "h1-after-section": "H1 appears after an H2 section",
+    "empty-heading": "Heading without text",
+    "invalid-url": "Link is not http(s) or a relative path",
+    "list-item-not-link": "Non-link list item inside a link section",
+    "missing-summary": "No '> summary' blockquote after the title",
+    "link-notes-format": "Notes after a link do not start with ':'",
+    "duplicate-link": "Same URL listed twice",
+    "duplicate-section": "Same H2 name used twice",
+    "empty-section": "H2 section without any link list",
+    "prose-in-section": "Prose inside a link section",
+    "heading-level": "H4+ heading",
+    "optional-not-last": "'Optional' section is not last",
+    "unclosed-code-fence": "Code fence is never closed",
+    "broken-link": "Linked URL is unreachable (--check-links)",
+    "fetch-error": "Remote llms.txt could not be fetched",
+}

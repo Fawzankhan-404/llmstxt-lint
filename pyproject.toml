@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llmstxt-lint"
-version = "0.1.0"
+version = "0.2.0"
 description = "Zero-dependency linter for llms.txt files (the /llms.txt proposal)"
 readme = "README.md"
 license = {text = "MIT"}

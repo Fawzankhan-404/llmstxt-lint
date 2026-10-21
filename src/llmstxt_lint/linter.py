@@ -27,16 +27,28 @@ def _url_ok(url: str) -> bool:
     return p.scheme in ("http", "https") and bool(p.netloc)
 
 
-def lint_text(text: str) -> list[Issue]:
-    issues: list[Issue] = []
+HTML_START = re.compile(r"^\s*(<!doctype html|<html)", re.I)
+
+
+def lint_text(text: str, kind: str = "llms") -> list[Issue]:
+    """Lint text. kind is "llms" (llms.txt) or "full" (llms-full.txt)."""
+    if text.startswith("\ufeff"):
+        text = text[1:]
     lines = text.splitlines()
     first_content = next((i for i, l in enumerate(lines) if l.strip()), None)
     if first_content is None:
         return [Issue(1, "empty-file", "error", "File is empty")]
+    if HTML_START.match(lines[first_content]):
+        return [Issue(first_content + 1, "html-content", "error",
+                      "File is HTML, not Markdown (server is probably returning a web page)")]
+    if kind == "full":
+        return _lint_full(lines, first_content)
+    issues: list[Issue] = []
 
     h1_lines = []
     section = None  # (line_no, name, link_count)
     sections: list[list] = []
+    pending: list[list] = []  # per-section list items that are not links
     seen_urls: dict[str, int] = {}
     seen_sections: dict[str, int] = {}
     in_code = False
@@ -61,8 +73,10 @@ def lint_text(text: str) -> list[Issue]:
                 if key in seen_sections:
                     issues.append(Issue(n, "duplicate-section", "warning", f"Section '{title}' already defined on line {seen_sections[key]}"))
                 seen_sections[key] = n
-                section = [n, title, 0]
+                section = [n, title, 0, []]
                 sections.append(section)
+            elif level == 3:
+                pass  # H3 sub-groups inside a section are common and harmless
             else:
                 issues.append(Issue(n, "heading-level", "warning", f"H{level} headings are not part of the llms.txt structure"))
             if not title:
@@ -84,11 +98,11 @@ def lint_text(text: str) -> list[Issue]:
             else:
                 seen_urls[url] = n
             if rest and not rest.startswith(":"):
-                issues.append(Issue(n, "link-notes-format", "warning", "Notes after a link must start with ': '"))
+                issues.append(Issue(n, "link-notes-format", "warning", "Notes after a link should start with ': ' (e.g. '- [name](url): notes')"))
         elif re.match(r"^[-*+]\s", stripped):
-            issues.append(Issue(n, "list-item-not-link", "error", "List items in sections must be '- [name](url)' or '- [name](url): notes'"))
-        else:
-            issues.append(Issue(n, "prose-in-section", "warning", "Sections should contain only link lists"))
+            section[3].append(n)
+        elif not re.match(r"^(\d+\.|>|\|)", stripped):
+            section[3].append(-n)  # prose, reported only in link sections
 
     if not h1_lines:
         issues.append(Issue(first_content + 1, "missing-h1", "error", "llms.txt must start with an H1 title"))
@@ -100,10 +114,38 @@ def lint_text(text: str) -> list[Issue]:
         nxt = next((l.strip() for l in lines[h1_lines[0]:] if l.strip()), "")
         if not nxt.startswith(">"):
             issues.append(Issue(h1_lines[0], "missing-summary", "warning", "Add a '> summary' blockquote after the title"))
-    for n, title, count in sections:
+    for n, title, count, non_links in sections:
         if count == 0:
-            issues.append(Issue(n, "empty-section", "warning", f"Section '{title}' has no links"))
+            issues.append(Issue(n, "empty-section", "warning", f"Section '{title}' has no link list"))
+        else:
+            for ln in non_links:
+                if ln < 0:
+                    issues.append(Issue(-ln, "prose-in-section", "warning", "Prose inside a link section; move it above the first H2"))
+                    continue
+                issues.append(Issue(ln, "list-item-not-link", "warning",
+                                    "List item in a link section is not '- [name](url)' or '- [name](url): notes'"))
     opt = [s for s in sections if s[1].lower() == "optional"]
     if opt and sections[-1] is not opt[-1]:
         issues.append(Issue(opt[-1][0], "optional-not-last", "warning", "The 'Optional' section should be the last section"))
+    if in_code:
+        issues.append(Issue(len(lines), "unclosed-code-fence", "warning", "A ``` code fence is never closed"))
     return sorted(issues, key=lambda i: (i.line, i.rule))
+
+
+def _lint_full(lines: list[str], first: int) -> list[Issue]:
+    issues: list[Issue] = []
+    in_code = False
+    h1 = []
+    for idx, raw in enumerate(lines):
+        if raw.lstrip().startswith("```"):
+            in_code = not in_code
+            continue
+        if not in_code and re.match(r"^#\s+\S", raw):
+            h1.append(idx + 1)
+    if in_code:
+        issues.append(Issue(len(lines), "unclosed-code-fence", "warning", "A ``` code fence is never closed"))
+    # Real llms-full.txt files concatenate many pages (several H1s) and may start
+    # with a preamble such as <SYSTEM>...</SYSTEM>, so only require some H1.
+    if not h1:
+        issues.append(Issue(first + 1, "missing-h1", "warning", "llms-full.txt has no H1 heading"))
+    return issues
