@@ -1,0 +1,14 @@
+# FastHTML
+
+> FastHTML is a python library for building web apps.
+
+Important notes about the project.
+
+## Docs
+
+- [Quick start](https://example.com/quickstart.md): A brief overview
+- [Reference](/docs/reference.md)
+
+## Optional
+
+- [Changelog](https://example.com/changelog.md)
