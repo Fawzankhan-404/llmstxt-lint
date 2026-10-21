@@ -56,6 +56,21 @@ def test_disable_next_line_suppresses_only_the_next_line():
     assert [i.line for i in lint_text(text) if i.rule == "list-item-not-link"] == [7]
 
 
+def test_directives_inside_code_blocks_are_ignored():
+    text = "# A\n> summary\n```html\n<!-- llmstxt-lint-disable invalid-url -->\n```\n## Docs\n- [Broken](nope)\n"
+    assert "invalid-url" in rules(text)
+
+
+def test_comments_do_not_affect_structural_checks():
+    text = "<!-- a note -->\n# A\n<!-- another note -->\n> summary\n"
+    assert lint_text(text) == []
+
+
+def test_full_file_directives_suppress_findings():
+    text = "<!-- llmstxt-lint-disable missing-h1,unclosed-code-fence -->\n```\n"
+    assert lint_text(text, kind="full") == []
+
+
 def test_cli_exit_codes(tmp_path, capsys):
     assert main([str(EX / "good.txt")]) == 0
     assert main([str(EX / "bad.txt")]) == 1
