@@ -50,6 +50,8 @@ def _status(url: str, timeout: float) -> str | None:
         except urllib.error.HTTPError as e:
             if method == "HEAD" and e.code in (403, 405, 501):
                 continue  # some servers reject HEAD; retry with GET
+            if e.code in (401, 403, 429):
+                return None  # exists but needs auth / blocks bots / rate-limits: not "broken"
             return f"HTTP {e.code}"
         except Exception as e:  # noqa: BLE001 - report any network failure
             return type(e).__name__ if not str(e) else str(e)[:80]

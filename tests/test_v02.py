@@ -17,6 +17,8 @@ class H(http.server.BaseHTTPRequestHandler):
         pass
 
     def _send(self, body=True):
+        if self.path == "/auth":
+            self.send_response(401); self.end_headers(); return
         if self.path == "/missing":
             self.send_response(404); self.end_headers(); return
         if self.path == "/nohead" and self.command == "HEAD":
@@ -26,7 +28,7 @@ class H(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         if body:
             if self.path == "/llms.txt":
-                self.wfile.write(b"# Site\n\n> s\n\n## Docs\n\n- [ok](/ok)\n- [gone](/missing)\n- [nohead](/nohead)\n")
+                self.wfile.write(b"# Site\n\n> s\n\n## Docs\n\n- [ok](/ok)\n- [gone](/missing)\n- [nohead](/nohead)\n- [auth](/auth)\n")
             elif self.path == "/page.html":
                 self.wfile.write(b"<!DOCTYPE html><html></html>")
             else:
